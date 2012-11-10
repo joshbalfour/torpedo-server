@@ -1,0 +1,10 @@
+{
+  "name": "torpedo-server",
+  "version": "0.0.1",
+  "description": "torpedo server",
+  "main": "torpedo-server.js",
+  "scripts": {},
+  "dependencies": {
+    "express": "*",
+  }
+}
