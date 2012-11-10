@@ -1,5 +1,5 @@
-= torpedo-server =
-====== Proof of concept for Firefox security flaw. ======
+# torpedo-server #
+###### Proof of concept for Firefox security flaw. ######
 
 ----
 
