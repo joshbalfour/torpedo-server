@@ -74,9 +74,9 @@ app.post('/co', function(req,res){
 IO = function(obj){
 	obj = obj || {};
 	this.sessions = {};
-	this.sessionLength = (obj.sessionLength || 6000);
-	this.clearTime = (obj.clearTime || 6000);
-	this.newConnection = (obj.newConnection || function(){});
+	this.sessionLength = (obj.sessionLength || 72000);
+	this.clearTime = (obj.clearTime || 60000);
+	this.newConnection = (obj.newConnection || function(){console.log("new connection")});
 };
 
 IO.prototype.cleanOldConnections = function(){
@@ -241,7 +241,12 @@ Session.prototype.currentConnections = function(){
 
 app.listen(1337);
 
-
+var socket = new IO().init(app);
+app.get('/test', function(req, res){
+		socket.sendAll("hurro :D");
+		res.end("1");
+		
+	})
 /*
 
 Server side socket instructions
