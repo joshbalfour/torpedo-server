@@ -1,4 +1,3 @@
-
 IO = function(obj){
 	obj = obj || {};
 	this.sessions = {};
@@ -81,7 +80,7 @@ IO.prototype.init = function(app){
 		if(me.sessions[id] != undefined){
 			var data = JSON.parse(req.body.data);
 			for(var i in data)
-				me.sessions[id].receiving(data[i]);
+				me.sessions[id].receiving(data[i],req);
 		
 		}else{
 			res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -174,7 +173,7 @@ Session.prototype.on = function(event, func){
 	this.localHandlers[event] = func;
 }
 
-Session.prototype.receiving = function(data){
+Session.prototype.receiving = function(data,req){
 	if(req.connection.remoteAddress != this.ipAddress)
 		return;
 	this.getHandler('receiving').call(this,data);
