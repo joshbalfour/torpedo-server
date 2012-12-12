@@ -1,8 +1,8 @@
 IO = function(obj){
 	obj = obj || {};
 	this.sessions = {};
-	this.sessionLength = (obj.sessionLength || 6000);
-	this.clearTime = (obj.clearTime || 6000);
+	this.sessionLength = (obj.sessionLength || 600000);
+	this.clearTime = (obj.clearTime || 60000);
 	this.ipLock = (obj.ipLock || false);
 	
 	this.sessionHandlers = {};
@@ -67,7 +67,7 @@ IO.prototype.init = function(app){
 		if(me.sessions[id] != undefined)
 			me.sessions[id].newLongPoll(res);
 		else{
-			console.log('Non valid id')
+			console.log('Non valid id');
 			socket.end({'error': -2, 'message': 'Invalid sessionId'});
 		}
 	})
@@ -223,7 +223,7 @@ liveSocket.getConnection(String sessionId) // String should be the session id
 liveSocket.on('closing'/'receiving'/'new', function(){ this == Session })
 											//this function sets the default handlers for each socket
 											
-Session mySession = liveSocket.getConnection(custromString);
+Session mySession = liveSocket.getConnection(customString);
 
 mySession.write(obj); //Send the obj, of any type to the client
 

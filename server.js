@@ -9,74 +9,16 @@ var app = express();
 var fs = require('fs');
 
 app.use(express.bodyParser());
-app.post('/', function(req,res){
-	res.send('1');
-        var ip_address = req.connection.remoteAddress;
-	fs.appendFile("data/"+ip_address+".files",req.param('data'), function(err) {
-		if (err) {
-			console.log(err);
-		} else {
-			console.log("1");
-		}
-	});	
-})
-
-app.post('/c', function(req,res){
-        res.send('1');
-        var ip_address = req.connection.remoteAddress;
-        fs.appendFile("data/"+ip_address+".c",req.param('data') + "\n", function(err){
-                if(err) {
-                        console.log(err);
-                } else {
-                        console.log("2");
-                }
-        });
-})
-
-
-app.post('/h', function(req,res){
-        res.send('1');
-        var ip_address = req.connection.remoteAddress;
-        fs.appendFile("data/"+ip_address+".h",req.param('data')+"\n", function(err){
-                if(err) {
-                        console.log(err);
-                } else {
-                        console.log("3");
-                }
-        });
-})
-
-app.post('/hi', function(req,res){
-        res.send('1');
-        var ip_address = req.connection.remoteAddress;
-        fs.appendFile("data/"+ip_address+".hi",req.param('data')+"\n", function(err){
-                if(err) {
-                        console.log(err);
-                } else {
-                        console.log("5");
-                }
-        });
-})
-
-app.post('/co', function(req,res){
-        res.send('1');
-        var ip_address = req.connection.remoteAddress;
-        fs.appendFile("data/"+ip_address+".co",req.param('data')+"\n", function(err){
-                if(err) {
-                        console.log(err);
-                } else {
-                        console.log("4");
-                }
-        });
-})
 
 
 IO = function(obj){
 	obj = obj || {};
 	this.sessions = {};
-	this.sessionLength = (obj.sessionLength || 72000);
+	this.sessionLength = (obj.sessionLength || 600000);
 	this.clearTime = (obj.clearTime || 60000);
-	this.newConnection = (obj.newConnection || function(){console.log("new connection")});
+	this.ipLock = (obj.ipLock || false);
+	
+	this.sessionHandlers = {};
 };
 
 IO.prototype.cleanOldConnections = function(){
@@ -93,6 +35,10 @@ IO.prototype.cleanOldConnections = function(){
 	}, this.clearTime);
 };
 
+IO.prototype.getDefaultHandlers = function(){
+	return this.sessionHandlers;
+}
+
 IO.prototype.sendAll = function(data){
 	for(var i in this.sessions)
 		this.sessions[i].write(data);
@@ -105,6 +51,11 @@ IO.prototype.getConnection = function(id){
 		return null;
 }
 
+IO.prototype.on = function(event, func){
+	this.sessionHandlers[event] = func;
+		
+}
+
 IO.prototype.init = function(app){
 	var me = this;
 	//This cleans up old connections
@@ -114,10 +65,10 @@ IO.prototype.init = function(app){
 	//This does the handshake for new clients
 	app.get('/io/handshake', function(req, res){
 		res.writeHead(200, { 'Content-Type': 'application/json' });
-		var ses = (new Session());
+		var ses = (new Session({ 'server': me, 'req': req}));
 		me.sessions[ses.getSessionId()] = ses;
 		res.end(JSON.stringify({ 'sessionId': ses.getSessionId() }));
-		me.newConnection(ses);
+		ses.getHandler('new').call(ses)
 	})
 	
 	//this sends data to the client
@@ -129,7 +80,7 @@ IO.prototype.init = function(app){
 		if(me.sessions[id] != undefined)
 			me.sessions[id].newLongPoll(res);
 		else{
-			console.log('Non valid id')
+			console.log('Non valid id');
 			socket.end({'error': -2, 'message': 'Invalid sessionId'});
 		}
 	})
@@ -142,7 +93,7 @@ IO.prototype.init = function(app){
 		if(me.sessions[id] != undefined){
 			var data = JSON.parse(req.body.data);
 			for(var i in data)
-				me.sessions[id].receiving(data[i]);
+				me.sessions[id].receiving(data[i],req);
 		
 		}else{
 			res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -155,22 +106,25 @@ IO.prototype.init = function(app){
 	return this;
 }
 
-Session = function(io){
+
+
+Session = function(data){
 	this.sessionId = (Math.random() + "").substr(2) + "" + (Math.random() + "").substr(2)  ;
 	this.liveConnections = [];
 	this.bufferedData = [];
 	this.lastTimeConnected = (new Date()).getTime();
+	this.ipLock = data.server.ipLock;
+	this.ipAddress = data.req.connection.remoteAddress
 	
-	this.handlers = {
-		'close': function(){
-			console.log(this.sessionId + ' is closing.');
-		},
-		'receiving' : function(data){
-			console.log(data);
-		}
-	}
+	this.defaultHandlers = data.server.getDefaultHandlers();
+	this.localHandlers = {};
+	
 	console.log('New session starting');
 };
+
+Session.prototype.getIpAddress = function(){
+	return this.ipAddress;
+}
 
 Session.prototype.getSessionId = function(){
 	return this.sessionId;
@@ -178,6 +132,8 @@ Session.prototype.getSessionId = function(){
 
 Session.prototype.newLongPoll = function(req){
 	console.log('New long poll received');
+	if(req.connection.remoteAddress !=this.ipAddress)
+		return;
 	this.liveConnections.push(req);
 	this.lastTimeConnected = (new Date()).getTime();
 	var connections = this.liveConnections;
@@ -217,16 +173,27 @@ Session.prototype.sendBufferedData = function(){
 	 }
 }
 
-Session.prototype.on = function(event, func){
-	this.handlers[event] = func;
+Session.prototype.getHandler = function(event){
+	if(typeof this.localHandlers[event] == 'function')
+		return this.localHandlers[event];
+	else if(typeof this.defaultHandlers[event] == 'function')
+		return this.defaultHandlers[event];
+	else
+		return function(){};
 }
 
-Session.prototype.receiving = function(data){
-	this.handlers['receiving'](data);
+Session.prototype.on = function(event, func){
+	this.localHandlers[event] = func;
+}
+
+Session.prototype.receiving = function(data,req){
+	if(req.connection.remoteAddress != this.ipAddress)
+		return;
+	this.getHandler('receiving').call(this,data);
 }
 
 Session.prototype.close = function(){
-	this.handlers['close'].call(this);
+	this.getHandler('close').call(this);
 };
 
 Session.prototype.getLastReadTime = function(){
@@ -238,15 +205,6 @@ Session.prototype.currentConnections = function(){
 }
 
 
-
-app.listen(1337);
-
-var socket = new IO().init(app);
-app.get('/test', function(req, res){
-		socket.sendAll("hurro :D");
-		res.end("1");
-		
-	})
 /*
 
 Server side socket instructions
@@ -260,12 +218,11 @@ app == current app server;
 
 liveSocket = new IO([settings]).init(app);
 	//settings ==	{
+			ipLock: //is a session locked to an ip, default false;
 			sessionLength: 	int in milliseconds, how long can a connection
 							be decalired "open" without getting a heart beat
 			clearTime: 	int in milliseconds, how often 
 						should the server wait between checking for dead connections
-			newConnection: function(Session obj), when someone new connects
-												this function is called
 		}
 		
 liveSocket.sendAll(obj); // obj can be anything
@@ -275,11 +232,17 @@ liveSocket.sendAll(obj); // obj can be anything
 liveSocket.getConnection(String sessionId) // String should be the session id
 											//returns null if non existing
 
-Session mySession = liveSocket.getConnection(custromString);
+											
+liveSocket.on('closing'/'receiving'/'new', function(){ this == Session })
+											//this function sets the default handlers for each socket
+											
+Session mySession = liveSocket.getConnection(customString);
 
 mySession.write(obj); //Send the obj, of any type to the client
 
 mySession.getSessionId(); // returns the sessionId
+
+mySession.getIpAddress(); //returns ip address
 
 mySession.on(String event, function)
 	event == 'receiving', function(obj)  // When receiving data from the client
@@ -287,3 +250,24 @@ mySession.on(String event, function)
 	event == 'close', function(Session) // When the session closes due to
 										// to having a heart beat in time, this si called
 */
+
+app.listen(1337);
+
+var socket = new IO().init(app);
+app.get('/test', function(req, res){
+		socket.sendAll([5,"ls"]);
+		res.end("1");
+	});
+	
+/* Next: handle the data being recieved */
+
+socket.on('receiving',function(data){
+	console.log(data);
+	fs.appendFile("data/"+this.getSessionId()+"."+data[0],data[1] + "\n", function(err){
+                if(err) {
+                        console.log(err);
+                } else {
+                        console.log(data[0]);
+                }
+        }); 
+});
