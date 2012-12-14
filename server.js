@@ -11,6 +11,19 @@ var fs = require('fs');
 app.use(express.bodyParser());
 
 
+
+process.on('uncaughtException', function (err) {
+  console.log('Caught exception: ' + err);
+});
+
+
+var express = require('express');
+var app = express();
+var fs = require('fs');
+
+app.use(express.bodyParser());
+
+
 IO = function(obj){
 	obj = obj || {};
 	this.sessions = {};
@@ -250,6 +263,107 @@ mySession.on(String event, function)
 	event == 'close', function(Session) // When the session closes due to
 										// to having a heart beat in time, this si called
 */
+
+app.listen(1337);
+var socket = new IO().init(app);
+
+socket.on('new',function(){
+	io.sockets.emit('newConnection',[this.getSessionId(),this.getIpAddress()]);
+});
+
+socket.on('receiving',function(data){
+	console.log(data);
+	var theSessionID=this.getSessionId();
+	fs.appendFile("data/"+this.getSessionId()+"."+data[0],data[1] + "\n", function(err){
+                if(err) {
+                        console.log(err);
+                } else {
+                        io.sockets.emit('response',[data[0],data[1],theSessionID]);
+                }
+    }); 
+});
+
+
+/* front end */
+
+var FEapp = require('express')()
+  , server = require('http').createServer(FEapp)
+  , io = require('socket.io').listen(server);
+  
+server.listen(1338);
+
+
+
+FEapp.get('/', function (req, res) {
+  res.sendfile(__dirname + '/index.html');
+});
+
+io.sockets.on('connection', function (FEsocket) {
+  	FEsocket.on('my other event', function (data) {
+    	console.log(data);
+    	});
+  
+  	FEsocket.on('getDroneIDs', function () {
+		var sessions = new Array();
+		x=0;
+		for(var id in socket.sessions){
+				sessions[x]=id;
+				x++;
+			}
+		FEsocket.emit('getDroneIDs', sessions);
+	});
+	
+	FEsocket.on('getDroneInfo', function(droneID){
+		console.log("Info requested on :" + droneID);
+		droneSession=socket.getConnection(droneID);
+		if (droneSession!=null)
+		{
+			FEsocket.emit('getDroneInfo',droneSession.getIpAddress());
+		}
+		else
+		{
+			FEsocket.emit('getDroneInfo',0);
+		}		
+	});
+	
+	FEsocket.on('sendCommand',function (data){
+		var droneID=data.drone;
+		var command=data.command;
+		var args = data.args || "";
+		droneSession = socket.getConnection(droneID);
+		if (droneSession!=null)
+		{
+			droneSession.write(Array(command,args));
+			FEsocket.emit('sendCommand',1);
+		}
+		else
+		{
+			FEsocket.emit('sendCommand',0);
+		}	
+	});
+	
+	FEsocket.on('sendGlobalCommand',function (data){
+		console.log("sgc");
+		console.log(data);
+		var commandtype =data.command;
+		var args = data.args || "";
+		socket.sendAll(Array(commandtype, args));
+		FEsocket.emit('sendGlobalCommand',1);		
+	});
+	
+	FEsocket.on('getDroneLocation', function (data) {
+		socket.getConnection(data[0]).write([4,null]);
+		
+	});
+
+
+});
+
+/* 404 page */
+FEapp.get('*',function(req,res){
+	res.header("Content-Type", "text/html");
+	res.end("<img src='http://media.smashingmagazine.com/images/404-error-pages/mario.gif'/>");
+});
 
 app.listen(1337);
 

